@@ -3,3 +3,4 @@ build/
 .idea/
 turremserver/
 *.iml
+src/main/java/blue/made/bcf/*

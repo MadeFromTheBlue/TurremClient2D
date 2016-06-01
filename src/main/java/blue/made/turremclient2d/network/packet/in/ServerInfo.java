@@ -39,6 +39,6 @@ public class ServerInfo implements IPacket {
 
 	@Override
 	public void onProcess() {
-		System.out.printf("%s : %s (%s%d.%d)", name, desc, getMajorString(), minor, patch);
+		System.out.printf("%s : %s (%s%d.%d)%n", name, desc, getMajorString(), minor, patch);
 	}
 }

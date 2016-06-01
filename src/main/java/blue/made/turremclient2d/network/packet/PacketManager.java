@@ -1,6 +1,13 @@
 package blue.made.turremclient2d.network.packet;
 
+import blue.made.bcf.*;
+import blue.made.turremclient2d.Game;
 import blue.made.turremclient2d.network.packet.in.ServerInfo;
+import blue.made.turremclient2d.world.Chunk;
+import blue.made.turremclient2d.world.Tags;
+import blue.made.turremclient2d.world.World;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -12,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.awt.image.Raster;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -45,19 +53,29 @@ public class PacketManager {
 				int type = in.readByte() & 0xFF;
 				IPacket.Loader loader = ipackets[type];
 				//System.out.printf("Packet: %d (%db)%n", type, len);
-				out.add(loader.load(in.readSlice(len - 1)));
+				ByteBuf pd = in.readSlice(len - 1);
+				if (loader != null) out.add(loader.load(pd));
+				else System.out.printf("No loader for packet type 0x%02X%n", type);
 			}
 		};
 	}
 
 	static {
-		ipackets[1] = (ByteBuf data) -> {
-			String name = data.readSlice(data.readByte() & 0xFF).toString(charset);
-			String desc = data.readSlice(data.readShort() & 0xFFFF).toString(charset);
-			int w = data.readByte() & 0xFF;
-			int h = data.readByte() & 0xFF;
+		ipackets[0x01] = (ByteBuf data) -> {
+			BCFReader reader = new BCFReader(data);
+			reader.next();
+			BCFMap map = reader.read().asMap();
+
+			String name = null;
+			if (map.containsKey("name")) name = map.get("name").toString();
+			String desc = null;
+			if (map.containsKey("desc")) desc = map.get("desc").toString();
+
 			BufferedImage ico = null;
-			if (w != 0 && h != 0) {
+			if (map.containsKey("ico")) {
+				int w = map.get("ico_w").asNumeric().intValue();
+				int h = map.get("ico_h").asNumeric().intValue();
+				ByteBuf icodat = map.get("ico").asRaw();
 				ico = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 				for (int x = 0; x < w; x++) {
 					for (int y = 0; y < h; y++) {
@@ -65,7 +83,61 @@ public class PacketManager {
 					}
 				}
 			}
-			return new ServerInfo(name, desc, ico, data.readShort(), data.readShort(), data.readShort());
+
+			BCFList version = map.get("version").asCollection().convertToList();
+
+			return new ServerInfo(name, desc, ico, version.get(0).asNumeric().shortValue(), version.get(1).asNumeric().shortValue(), version.get(2).asNumeric().shortValue());
+		};
+		ipackets[0x20] = (ByteBuf data) -> {
+			BCFReader reader = new BCFReader(data);
+			reader.next();
+			BCFMap map = reader.read().asMap();
+			int xwidth = map.get("xwidth").asNumeric().intValue();
+			int ywidth = map.get("ywidth").asNumeric().intValue();
+			int chunkSize = map.get("chunk_size").asNumeric().intValue();
+
+			Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+			System.out.println(gson.toJson(map.toJson()));
+
+			BCFMap tags = map.get("tile_tag_reg").asMap();
+
+			return (IPacket) () -> {
+				Game game = Game.INSTANCE;
+				game.world = new World(xwidth, ywidth, chunkSize);
+				if (tags != null) game.world.tags = new Tags(tags);
+				System.out.printf("New %dx%d world%n", xwidth, ywidth);
+				game.onWorldLoad.accept(game);
+			};
+		};
+		ipackets[0x21] = (ByteBuf data) -> {
+			Game game = Game.INSTANCE;
+			int size = game.world.chunkSize;
+			BCFReader reader = new BCFReader(data);
+			reader.next();
+			BCFMap map = reader.read().asMap();
+			int x = map.get("x").asNumeric().intValue();
+			int y = map.get("y").asNumeric().intValue();
+
+			return (IPacket) () -> {
+				Chunk c = new Chunk(x, y);
+				game.world.chunks[x][y] = c;
+				c.height = new float[size * size];
+				Iterator<BCFItem> hm = map.get("height_map").asArray().iterator();
+				int s = game.world.chunkSize;
+				s *= s;
+				int i = 0;
+				while (i < s) {
+					c.height[i++] = hm.next().asNumeric().floatValue();
+				}
+				ByteBuf tagdat = map.get("tile_tags").asRaw();
+				i = 0;
+				c.tags = new short[s][];
+				while (i < s) {
+					short[] tags = new short[tagdat.readByte() & 0xFF];
+					for (int j = 0; j < tags.length; j++) tags[j] = tagdat.readShort();
+					c.tags[i++] = tags;
+				}
+			};
 		};
 	}
 }

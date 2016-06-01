@@ -75,6 +75,7 @@ public class Network {
 
 	public void disconnect() {
 		if (ch != null) {
+			System.out.println("Disconnecting...");
 			if (lastWriteFuture != null) {
 				try {
 					lastWriteFuture.sync();
