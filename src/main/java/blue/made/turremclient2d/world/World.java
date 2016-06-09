@@ -1,5 +1,10 @@
 package blue.made.turremclient2d.world;
 
+import blue.made.turremclient2d.actors.structure.Structure;
+import gnu.trove.map.hash.TLongObjectHashMap;
+
+import java.util.function.Consumer;
+
 /**
  * Created by Sam Sartor on 5/31/2016.
  */
@@ -12,7 +17,11 @@ public class World {
 
 	public final Chunk[][] chunks;
 
+	public final TLongObjectHashMap<Structure> structures = new TLongObjectHashMap<>();
+
 	public Tags tags;
+
+	public Consumer<World> onChange = w -> {};
 
 	public World(int xwidth, int ywidth, int chunkSize) {
 		this.xwidth = xwidth;
@@ -32,5 +41,9 @@ public class World {
 		Chunk c = chunks[x / chunkSize][y / chunkSize];
 		if (c == null) return 0;
 		return c.height[x % chunkSize + (y % chunkSize) * chunkSize];
+	}
+
+	public void onChanged() {
+		onChange.accept(this);
 	}
 }

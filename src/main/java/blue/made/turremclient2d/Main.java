@@ -22,7 +22,8 @@ public class Main {
 		Network net = new Network(HOST, PORT);
 		net.connect();
 		Game.INSTANCE.net = net;
-		UI.show(Game.INSTANCE);
+		UI ui = new UI();
+		ui.show(Game.INSTANCE);
 		net.send(data -> {
 			BCFWriter bcf = new BCFWriter(data);
 			BCFWriter.Map map = bcf.startMap();

@@ -2,6 +2,10 @@ package blue.made.turremclient2d.network.packet;
 
 import blue.made.bcf.*;
 import blue.made.turremclient2d.Game;
+import blue.made.turremclient2d.actors.structure.Bounds;
+import blue.made.turremclient2d.actors.structure.Structure;
+import blue.made.turremclient2d.actors.structure.StructureRegistry;
+import blue.made.turremclient2d.actors.structure.StructureSpec;
 import blue.made.turremclient2d.network.packet.in.ServerInfo;
 import blue.made.turremclient2d.world.Chunk;
 import blue.made.turremclient2d.world.Tags;
@@ -16,7 +20,6 @@ import io.netty.handler.codec.MessageToByteEncoder;
 import io.netty.handler.codec.ReplayingDecoder;
 
 import java.awt.image.BufferedImage;
-import java.awt.image.Raster;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
@@ -88,6 +91,17 @@ public class PacketManager {
 
 			return new ServerInfo(name, desc, ico, version.get(0).asNumeric().shortValue(), version.get(1).asNumeric().shortValue(), version.get(2).asNumeric().shortValue());
 		};
+		ipackets[0x10] = (ByteBuf data) -> {
+			BCFReader reader = new BCFReader(data);
+			BCFMap map = BCF.read(reader).asMap();
+			String id = map.get("spec").asString();
+
+			StructureSpec spec = new StructureSpec();
+			spec.id = id;
+			spec.bounds = Bounds.load(map.get("bounds"));
+
+			return (IPacket) () -> StructureRegistry.specs.put(id, spec);
+		};
 		ipackets[0x20] = (ByteBuf data) -> {
 			BCFReader reader = new BCFReader(data);
 			reader.next();
@@ -120,7 +134,6 @@ public class PacketManager {
 
 			return (IPacket) () -> {
 				Chunk c = new Chunk(x, y);
-				game.world.chunks[x][y] = c;
 				c.height = new float[size * size];
 				Iterator<BCFItem> hm = map.get("height_map").asArray().iterator();
 				int s = game.world.chunkSize;
@@ -136,6 +149,18 @@ public class PacketManager {
 					short[] tags = new short[tagdat.readByte() & 0xFF];
 					for (int j = 0; j < tags.length; j++) tags[j] = tagdat.readShort();
 					c.tags[i++] = tags;
+				}
+				game.world.chunks[x][y] = c;
+			};
+		};
+		ipackets[0x40] = (ByteBuf data) -> {
+			Game game = Game.INSTANCE;
+			BCFMap map = BCF.read(new BCFReader(data)).asMap();
+
+			return (IPacket) () -> {
+				StructureSpec spec = StructureRegistry.specs.get(map.get("spec").asString());
+				if (spec != null) {
+					Structure s = spec.spawn(map);
 				}
 			};
 		};
